@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>레슨 관리 시스템</title>
+<style>
+  :root{
+    --blue:#3182F6;
+    --blue-dark:#1B64DA;
+    --blue-light:#EBF2FF;
+    --bg:#F2F4F6;
+    --card:#FFFFFF;
+    --text:#191F28;
+    --text-sub:#8B95A1;
+    --border:#E5E8EB;
+    --green:#12B886;
+    --green-light:#E6FCF5;
+    --red:#F04452;
+    --red-light:#FFEEF0;
+    --orange:#FF9F1C;
+    --orange-light:#FFF4E5;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+    --shadow: 0 2px 10px rgba(25,31,40,0.05), 0 0 1px rgba(25,31,40,0.08);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard','Malgun Gothic','Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:1180px; margin:0 auto; padding:28px 20px 80px; }
+  .app-title{ font-size:22px; font-weight:800; letter-spacing:-0.5px; margin:0 0 4px; }
+  .app-sub{ color:var(--text-sub); font-size:14px; margin:0; }
+  .header-row{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+  .save-box{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  .save-indicator{ font-size:12px; font-weight:700; color:var(--text-sub); }
+
+  .tabs{
+    display:flex; gap:6px; background:#fff; padding:6px; border-radius:999px;
+    box-shadow:var(--shadow); margin-bottom:24px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+  }
+  .tab-btn{
+    flex:1; white-space:nowrap; text-align:center; padding:11px 18px; border:none; background:transparent;
+    border-radius:999px; font-size:14px; font-weight:700; color:var(--text-sub); cursor:pointer;
+    transition:all .15s ease;
+  }
+  .tab-btn:hover{ color:var(--text); }
+  .tab-btn.active{ background:var(--blue); color:#fff; }
+
+  .panel{ display:none; }
+  .panel.active{ display:block; animation:fadein .2s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+
+  .card{
+    background:var(--card); border-radius:var(--radius-lg); padding:24px;
+    box-shadow:var(--shadow); margin-bottom:18px;
+  }
+  .card-title{ font-size:16px; font-weight:800; margin:0 0 16px; display:flex; align-items:center; justify-content:space-between; }
+  .card-title .hint{ font-size:12px; font-weight:500; color:var(--text-sub); }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
+  @media(max-width:900px){ .kpi-grid{ grid-template-columns:repeat(2,1fr);} }
+  .kpi{
+    background:#fff; border-radius:var(--radius-md); padding:20px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .kpi.manual{ background:var(--orange-light); }
+  .kpi-label{ font-size:13px; color:var(--text-sub); font-weight:600; }
+  .kpi-value{ font-size:26px; font-weight:800; color:var(--text); letter-spacing:-0.5px; }
+  .kpi.manual .kpi-value{ color:#B8720B; }
+  .kpi-value.blue{ color:var(--blue); }
+  .kpi-input{
+    width:80px; font-size:26px; font-weight:800; color:#B8720B; border:none; background:transparent; padding:0;
+  }
+  .kpi-input:focus{ outline:none; border-bottom:2px solid var(--orange); }
+
+  .table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  thead th{
+    text-align:left; padding:10px 10px; color:var(--text-sub); font-weight:700; font-size:12.5px;
+    border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tbody tr:hover{ background:#FAFBFC; }
+  tbody tr.conflict{ background:var(--red-light); }
+  tbody tr.expired{ background:var(--orange-light); }
+
+  input[type=text], input[type=number], input[type=date], select{
+    width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:8px;
+    font-size:13px; font-family:inherit; background:#fff; color:var(--text);
+  }
+  input:focus, select:focus{ outline:none; border-color:var(--blue); }
+  select{ padding-right:26px; } /* 네이티브 드롭다운 화살표와 글자가 겹치지 않도록 오른쪽 여백 확보 */
+  .cell-input{ min-width:82px; }
+  .cell-phone{ min-width:138px; }
+  .cell-date{ min-width:134px; }
+  .cell-money{ min-width:106px; }
+  .cell-select{ min-width:108px; }
+  .cell-status{ min-width:94px; }
+  textarea.cell-reason{
+    min-width:210px; width:100%; resize:none; overflow:hidden; line-height:1.5; display:block;
+    padding:7px 9px; border:1px solid var(--border); border-radius:8px;
+    font-family:inherit; font-size:13px; color:var(--text);
+  }
+
+  .btn{
+    display:inline-flex; align-items:center; gap:6px; padding:10px 18px; border-radius:999px; border:none;
+    font-weight:700; font-size:13.5px; cursor:pointer; transition:all .15s ease;
+  }
+  .btn-primary{ background:var(--blue); color:#fff; }
+  .btn-primary:hover{ background:var(--blue-dark); }
+  .btn-ghost{ background:var(--blue-light); color:var(--blue); }
+  .btn-ghost:hover{ background:#DCE9FF; }
+  .btn-del{ background:transparent; color:var(--red); border:1px solid var(--red-light); padding:6px 10px; font-size:12px; border-radius:8px; font-weight:700; cursor:pointer; }
+  .btn-del:hover{ background:var(--red-light); }
+
+  .badge{ display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+  .badge-green{ background:var(--green-light); color:var(--green); }
+  .badge-red{ background:var(--red-light); color:var(--red); }
+  .badge-orange{ background:var(--orange-light); color:#B8720B; }
+  .badge-gray{ background:#F2F4F6; color:var(--text-sub); }
+
+  .form-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+  @media(max-width:900px){ .form-grid{ grid-template-columns:repeat(2,1fr);} }
+  .form-field label{ display:block; font-size:12px; font-weight:700; color:var(--text-sub); margin-bottom:5px; }
+
+  .note{ background:var(--blue-light); color:var(--blue-dark); border-radius:var(--radius-sm); padding:12px 16px; font-size:12.5px; margin-bottom:16px; line-height:1.6; }
+  .note.warn{ background:var(--orange-light); color:#946200; }
+
+  .schedule-grid{ display:grid; grid-template-columns:70px repeat(7,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+  .sg-cell{ background:#fff; padding:6px 4px; font-size:11.5px; min-height:26px; display:flex; align-items:center; justify-content:center; text-align:center; }
+  .sg-head{ background:var(--blue); color:#fff; font-weight:800; padding:10px 4px; }
+  .sg-time{ background:#FAFBFC; color:var(--text-sub); font-weight:700; font-size:11px; }
+  .sg-lesson{ background:var(--blue-light); color:var(--blue-dark); font-weight:700; border-radius:6px; margin:2px; }
+  .sg-conflict{ background:var(--red-light) !important; color:var(--red) !important; font-weight:800; }
+
+  .empty{ text-align:center; color:var(--text-sub); padding:40px 0; font-size:13.5px; }
+
+  .report-modal{ position:fixed; inset:0; background:rgba(25,31,40,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; }
+  .report-modal-inner{ background:#fff; border-radius:var(--radius-lg); padding:28px; max-width:760px; width:100%; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow); }
+  .report-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:16px; }
+  .report-filter{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; padding:14px; background:var(--bg); border-radius:var(--radius-md); }
+  .report-filter .form-field label{ display:block; font-size:11.5px; font-weight:700; color:var(--text-sub); margin-bottom:4px; }
+  .report-filter select, .report-filter input{ width:auto; min-width:90px; }
+  #report-print-area .rp-title{ font-size:19px; font-weight:800; margin:0 0 2px; }
+  #report-print-area .rp-sub{ font-size:12.5px; color:var(--text-sub); margin:0 0 18px; }
+  #report-print-area .rp-meta{ display:grid; grid-template-columns:repeat(2,1fr); gap:6px 18px; font-size:13px; margin-bottom:18px; background:var(--blue-light); border-radius:var(--radius-sm); padding:14px 16px; }
+  #report-print-area .rp-meta b{ color:var(--blue-dark); }
+  #report-print-area table{ margin-bottom:6px; }
+
+  @page{ margin:14mm; }
+  @media print{
+    html, body{ background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    body *{ visibility:hidden; }
+    #report-print-area, #report-print-area *{ visibility:visible; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    #report-print-area{ position:absolute; left:0; top:0; width:100%; padding:0; }
+    .report-modal, .report-modal-inner{ position:static; background:none; box-shadow:none; padding:0; max-height:none; overflow:visible; }
+    .report-filter, .report-noprint{ display:none !important; }
+  }
+
+  /* ============ 모바일(아이폰 등) 화면 대응 ============
+     주의: 검색해서 받아온 코드에는 .dashboard-cards / .stats-container / .tab-buttons / .nav-menu /
+     .table-container / .schedule-container 같은 클래스가 있었는데, 이 파일에는 그런 클래스가 없어서
+     (실제로는 .kpi-grid, .tabs/.tab-btn, .table-scroll, .schedule-grid 를 씁니다) 그대로 붙이면
+     대부분 적용되지 않는 죽은 코드가 됩니다. 또 input/select/button 전체에 width:100% !important를
+     주면 표 안의 작은 입력칸·삭제버튼까지 전부 늘어나며 표 레이아웃이 깨져서, 실제 클래스명에 맞춰
+     다시 작성했습니다. */
+  @media (max-width:768px){
+    .wrap{ padding:16px 12px 60px; }
+    .app-title{ font-size:19px; }
+    .app-sub{ font-size:12.5px; }
+
+    .header-row{ flex-direction:column; align-items:stretch; gap:12px; }
+    .save-box{ align-items:stretch; }
+    .save-box > div{ flex-wrap:wrap; }
+    .save-box .btn{ flex:1; justify-content:center; }
+
+    .tab-btn{ padding:10px 12px; font-size:12.5px; }
+
+    .kpi-grid{ grid-template-columns:repeat(2,1fr); gap:10px; }
+    .kpi{ padding:14px; }
+    .kpi-value{ font-size:20px; }
+    .kpi-input{ width:64px; font-size:20px; }
+
+    .card{ padding:16px; }
+    .card-title{ font-size:15px; }
+
+    .form-grid{ grid-template-columns:1fr; gap:10px; }
+
+    table{ font-size:12.5px; }
+
+    /* 표는 세로로 욱여넣지 않고, 기존처럼 옆으로 스크롤하는 방식을 그대로 유지합니다
+       (표 칸 입력폭을 강제로 100%로 늘리면 좁은 화면에서 오히려 더 깨집니다). */
+    .schedule-grid{ min-width:640px; }
+
+    .report-modal{ padding:10px; }
+    .report-modal-inner{ padding:18px; }
+    .report-filter{ padding:10px; gap:8px; }
+  }
+  @media (max-width:420px){
+    .kpi-grid{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header-row">
+    <div>
+      <div class="app-title">🎤 레슨 관리 시스템</div>
+      <div class="app-sub">보컬레슨 계약서와 연동되는 학생·결제·레슨 관리 도구</div>
+    </div>
+    <div class="save-box">
+      <div id="save-indicator" class="save-indicator">저장 준비 중...</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-ghost" onclick="exportData()">⬇ 백업 저장</button>
+        <button class="btn btn-ghost" onclick="triggerImport()">⬆ 백업 불러오기</button>
+        <input id="import-file" type="file" accept="application/json" style="display:none" onchange="importDataFile(this)">
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">대시보드</button>
+    <button class="tab-btn" data-tab="students" onclick="switchTab('students')">학생관리</button>
+    <button class="tab-btn" data-tab="payments" onclick="switchTab('payments')">결제관리</button>
+    <button class="tab-btn" data-tab="lessons" onclick="switchTab('lessons')">레슨기록</button>
+    <button class="tab-btn" data-tab="progress" onclick="switchTab('progress')">진행현황</button>
+    <button class="tab-btn" data-tab="schedule" onclick="switchTab('schedule')">주간일정</button>
+  </div>
+
+  <div id="panel-dashboard" class="panel active"></div>
+  <div id="panel-students" class="panel"></div>
+  <div id="panel-payments" class="panel"></div>
+  <div id="panel-lessons" class="panel"></div>
+  <div id="panel-progress" class="panel"></div>
+  <div id="panel-schedule" class="panel"></div>
+</div>
+
+<div id="report-modal" class="report-modal" style="display:none;">
+  <div class="report-modal-inner">
+    <div class="report-header report-noprint">
+      <div class="card-title" style="margin:0;">학생별 레슨 여정 리포트</div>
+      <button class="btn btn-ghost" onclick="closeReport()">닫기 ✕</button>
+    </div>
+    <div class="report-filter report-noprint">
+      <div class="form-field"><label>기간 구분</label>
+        <select id="rp-type" onchange="renderReportContent()">
+          <option value="all">전체</option>
+          <option value="year">연도별</option>
+          <option value="quarter">분기별</option>
+          <option value="month">월별</option>
+        </select>
+      </div>
+      <div class="form-field"><label>연도</label><input id="rp-year" type="number" style="width:90px;" onchange="renderReportContent()"></div>
+      <div class="form-field" id="rp-quarter-field"><label>분기</label>
+        <select id="rp-quarter" onchange="renderReportContent()"><option value="1">1분기</option><option value="2">2분기</option><option value="3">3분기</option><option value="4">4분기</option></select>
+      </div>
+      <div class="form-field" id="rp-month-field"><label>월</label>
+        <select id="rp-month" onchange="renderReportContent()">${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}월</option>`).join('')}</select>
+      </div>
+      <button class="btn btn-primary" style="margin-left:auto;" onclick="printReport()">🖨 인쇄 / PDF로 저장</button>
+    </div>
+    <div id="report-print-area"></div>
+  </div>
+</div>
+
+<script>
+/* ============ 데이터 (메모리 저장 — 새로고침 시 예시로 초기화됩니다) ============ */
+let students = [
+  { id:'S001', name:'홍길동(예시)', phone:'010-0000-0000', isMinor:false, guardianName:'', guardianPhone:'', relation:'', note:'특이사항 없음', regDate:'2026-07-01', fee:160000, day:'화', time:'18:00', duration:60, status:'활성' }
+];
+let payments = [
+  { id:'P0001', studentId:'S001', date:'2026-07-01', amount:160000, method:'계좌이체', completed:'Y', refund:'N', refundAmount:0, refundDate:'', refundReason:'' }
+];
+let lessons = [
+  { id:'L00001', studentId:'S001', date:'2026-07-08', status:'정상출석', memo:'' }
+];
+let manualUnpaid = 0;
+let seq = { s:2, p:2, l:2 };
+
+const COUNTED = ['정상출석','노쇼','당일취소','보강완료'];
+const DAYS = ['월','화','수','목','금','토','일'];
+const DOW_KR = ['일','월','화','수','목','금','토']; // Date.getDay() 인덱스와 매핑
+
+/* ============ 유틸 ============ */
+function pad(n, len){ return String(n).padStart(len,'0'); }
+function studentById(id){ return students.find(s=>s.id===id); }
+function studentName(id){ const s = studentById(id); return s ? s.name : '(삭제된 학생)'; }
+function fmtMoney(n){ return (Number(n)||0).toLocaleString('ko-KR') + '원'; }
+function fmtNum(n){ return (Number(n)||0).toLocaleString('ko-KR'); }
+function parseMoney(str){ return Number(String(str==null?'':str).replace(/[^\d]/g,'')) || 0; }
+function formatMoneyInput(el){
+  const raw = el.value.replace(/[^\d]/g,'');
+  el.value = raw ? Number(raw).toLocaleString('ko-KR') : '';
+}
+function autoGrow(el){
+  if(!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+function escapeHtml(str){
+  return String(str==null?'':str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+/* ============ 표 안 입력칸에서 Tab으로 다음 칸 이동 (수정 시 표 전체가 다시 그려져도 포커스가 튀지 않도록) ============
+   학생관리/결제관리/레슨기록 표의 각 입력칸은 값이 바뀌면 onchange가 발생해 renderAll()이 화면을 통째로 다시 그립니다.
+   이때 브라우저가 원래 이동하려던 다음 칸이 사라져서 기본 Tab 이동이 깨지고 커서가 표의 첫 칸으로 튑니다.
+   그래서 Tab을 직접 가로채, 다시 그려지기 전에 '다음 칸이 무엇인지'를 미리 계산해두고 다시 그려진 뒤 그 칸으로 포커스를 옮깁니다. */
+function fkeyFocusables(panel){
+  return Array.from(panel.querySelectorAll('input[data-fkey], select[data-fkey], textarea[data-fkey]'))
+    .filter(el=>!el.disabled);
+}
+function selectFieldFocus(el){
+  el.focus();
+  if((el.tagName==='INPUT' || el.tagName==='TEXTAREA') && typeof el.select==='function'){
+    try{ el.select(); }catch(e){}
+  }
+}
+function handleTableTab(e){
+  if(e.key !== 'Tab') return;
+  const el = e.target;
+  if(!el.matches || !el.matches('input[data-fkey], select[data-fkey], textarea[data-fkey]')) return;
+  const panel = el.closest('.panel');
+  if(!panel) return;
+  const list = fkeyFocusables(panel);
+  const idx = list.indexOf(el);
+  if(idx===-1) return;
+  const nextIdx = e.shiftKey ? idx-1 : idx+1;
+  const nextEl = list[nextIdx];
+  if(!nextEl) return; // 표의 맨 끝/맨 앞이면 기본 동작(다른 요소로 이동)에 맡깁니다
+  e.preventDefault();
+  const panelId = panel.id;
+  const nextKey = nextEl.getAttribute('data-fkey');
+  el.blur(); // 값이 바뀐 경우 change -> renderAll()이 동기적으로 여기서 실행되어 표가 다시 그려집니다
+  // 다시 그려지지 않았다면 nextEl이 그대로 화면에 남아있으므로 바로 포커스
+  if(document.contains(nextEl)){ selectFieldFocus(nextEl); return; }
+  // 다시 그려졌다면 같은 자리(data-fkey)를 새 DOM에서 찾아 포커스
+  const freshPanel = document.getElementById(panelId);
+  const freshEl = freshPanel && freshPanel.querySelector(`[data-fkey="${CSS.escape(nextKey)}"]`);
+  if(freshEl) selectFieldFocus(freshEl);
+}
+document.addEventListener('keydown', handleTableTab, true);
+
+/* ============ 표 가로 스크롤 위치 유지 (수정 시 표가 다시 그려져도 스크롤 바가 맨 앞으로 튀지 않도록) ============ */
+function getScrollPos(panelId){
+  const panel = document.getElementById(panelId);
+  const sc = panel && panel.querySelector('.table-scroll');
+  return sc ? sc.scrollLeft : 0;
+}
+function restoreScrollPos(panelId, pos){
+  const panel = document.getElementById(panelId);
+  const sc = panel && panel.querySelector('.table-scroll');
+  if(sc) sc.scrollLeft = pos;
+}
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function addMonths(dateStr, months){
+  if(!dateStr) return null;
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth()+months);
+  return d.toISOString().slice(0,10);
+}
+
+/* ---- 기수/회차는 저장되지 않고, 매 렌더링마다 아래 함수들로 항상 새로 계산됩니다 ----
+   결제 기수 = 해당 학생의 결제를 날짜순(동일일자는 등록순)으로 정렬했을 때의 순번
+   레슨 기수/회차 = 해당 학생의 '진행카운트 대상' 레슨만 날짜순으로 정렬 후 4개씩 묶어서 1~4회차→1기, 5~8회차→2기 ... 로 자동 배정
+   이렇게 하면 결제를 추가로 등록하면 기수가 즉시 늘어나고, 레슨을 4회 넘게 기록해도 다음 기수로 자동 이월되어
+   진행횟수가 "5/4"처럼 초과 표시되는 문제가 발생하지 않습니다. */
+function studentPaymentsSorted(studentId){
+  return payments.filter(p=>p.studentId===studentId)
+    .slice().sort((a,b)=> (a.date||'').localeCompare(b.date||'') || a.id.localeCompare(b.id));
+}
+function studentCountedLessonsSorted(studentId){
+  return lessons.filter(l=>l.studentId===studentId && COUNTED.includes(l.status))
+    .slice().sort((a,b)=> (a.date||'').localeCompare(b.date||'') || a.id.localeCompare(b.id));
+}
+// 결제 1건이 그 학생의 몇 번째 결제인지 (1부터 시작). 못 찾으면 null.
+function paymentRank(payment){
+  const list = studentPaymentsSorted(payment.studentId);
+  const idx = list.findIndex(p=>p.id===payment.id);
+  return idx===-1 ? null : idx+1;
+}
+// 레슨 1건의 기수/회차를 계산 (진행카운트 대상이 아니면 기수/회차 없음 → null)
+function lessonBucket(lesson){
+  if(!COUNTED.includes(lesson.status)) return null;
+  const list = studentCountedLessonsSorted(lesson.studentId);
+  const idx = list.findIndex(l=>l.id===lesson.id);
+  if(idx===-1) return null;
+  const overallPos = idx+1; // 1부터 시작
+  const term = Math.ceil(overallPos/4);
+  const session = overallPos - (term-1)*4;
+  return {term, session};
+}
+
+function progressFor(studentId){
+  const payList = studentPaymentsSorted(studentId);
+  const countedList = studentCountedLessonsSorted(studentId);
+  if(payList.length===0 && countedList.length===0) return null;
+
+  const totalCounted = countedList.length;
+  const bucketTerm = totalCounted>0 ? Math.ceil(totalCounted/4) : 0;
+  const currentTerm = Math.max(payList.length, bucketTerm, 1);
+
+  // 현재 기수에 해당하는 진행횟수만 다시 산정 (기수가 늘어나면 이전 기수분은 자동으로 차감됨)
+  const progressCount = Math.max(0, Math.min(4, totalCounted - (currentTerm-1)*4));
+  const remaining = Math.max(0, 4-progressCount);
+
+  const pay = payList[currentTerm-1]; // 현재 기수에 대응하는 결제 (아직 결제 전이면 undefined)
+  const startDate = pay ? pay.date : null;
+  const deadline = startDate ? addMonths(startDate, 2) : null;
+  const expired = deadline ? (todayStr() > deadline && remaining>0) : false;
+  const needsPayment = progressCount >= 4;
+  const noPaymentForCurrentTerm = !pay;
+  let refundRate;
+  if(progressCount===0) refundRate='100%';
+  else if(progressCount===1) refundRate='66.7%(2/3)';
+  else if(progressCount===2) refundRate='50%(1/2)';
+  else refundRate='0%(환불없음)';
+  return {currentTerm, progressCount, remaining, startDate, deadline, expired, needsPayment, refundRate, noPaymentForCurrentTerm};
+}
+
+function hasConflict(student){
+  if(student.status!=='활성' || !student.day || !student.time) return false;
+  return students.some(s => s.id!==student.id && s.status==='활성' && s.day===student.day && s.time===student.time);
+}
+
+/* ============ 대시보드 계산 ============ */
+function totalStudents(){ return students.length; }
+function activeStudents(){ return students.filter(s=>s.status==='활성').length; }
+function thisMonthRevenue(){
+  const ym = todayStr().slice(0,7);
+  return payments.filter(p=>p.date && p.date.slice(0,7)===ym).reduce((sum,p)=>sum+Number(p.amount||0),0);
+}
+function studentsNeedingPayment(){
+  return students.filter(s=>{ const p = progressFor(s.id); return p && p.needsPayment; }).length;
+}
+
+/* ============ 저장 (브라우저 로컬 자동저장 + 백업 파일) ============ */
+const STORAGE_KEY = 'lesson_mgmt_v1';
+let storageAvailable = true;
+
+function saveToLocalStorage(){
+  try{
+    const data = { students, payments, lessons, manualUnpaid, seq };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    storageAvailable = true;
+  }catch(e){
+    storageAvailable = false; // 브라우저가 로컬저장을 막아둔 경우(파일 직접 열기 등) — 백업 파일로 대체 안내
+  }
+  updateSaveIndicator();
+}
+
+function loadFromLocalStorage(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    if(data.students) students = data.students;
+    if(data.payments) payments = data.payments;
+    if(data.lessons) lessons = data.lessons;
+    if(typeof data.manualUnpaid === 'number') manualUnpaid = data.manualUnpaid;
+    if(data.seq) seq = data.seq;
+    return true;
+  }catch(e){ return false; }
+}
+
+function updateSaveIndicator(){
+  const el = document.getElementById('save-indicator');
+  if(!el) return;
+  if(storageAvailable){
+    const now = new Date();
+    el.textContent = '이 브라우저에 자동 저장됨 · ' + now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    el.style.color = 'var(--green)';
+  }else{
+    el.textContent = '⚠ 이 브라우저에서는 자동 저장이 안 돼요 — 백업 저장 버튼을 이용하세요';
+    el.style.color = 'var(--red)';
+  }
+}
+
+function exportData(){
+  const data = { students, payments, lessons, manualUnpaid, seq, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `레슨관리_백업_${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============ CSV 내보내기 (엑셀에서 바로 열리도록 UTF-8 BOM 포함) ============ */
+function csvCell(v){
+  const s = String(v==null?'':v);
+  if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+function downloadCsv(filename, rows){
+  const csv = rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportCsv(type){
+  if(type==='students'){
+    const rows = [['학생ID','학생명','연락처','미성년자','법정대리인','대리인연락처','관계','특이사항','등록일','레슨비','요일','시간','레슨시간(분)','상태']];
+    students.forEach(s=> rows.push([s.id,s.name,s.phone,s.isMinor?'Y':'N',s.guardianName,s.guardianPhone,s.relation,s.note,s.regDate,s.fee,s.day,s.time,s.duration,s.status]));
+    downloadCsv(`학생목록_${todayStr()}.csv`, rows);
+  }else if(type==='payments'){
+    const rows = [['결제ID','학생ID','학생명','입금일','금액','수단','기수(자동)','완료','환불','환불액','환불일','환불사유']];
+    payments.forEach(p=> rows.push([p.id,p.studentId,studentName(p.studentId),p.date,p.amount,p.method,paymentRank(p),p.completed,p.refund,p.refundAmount,p.refundDate,p.refundReason]));
+    downloadCsv(`결제내역_${todayStr()}.csv`, rows);
+  }else if(type==='lessons'){
+    const rows = [['기록ID','학생ID','학생명','기수(자동)','회차(자동)','날짜','출석상태','진행카운트','메모']];
+    lessons.forEach(l=>{
+      const bk = lessonBucket(l);
+      rows.push([l.id,l.studentId,studentName(l.studentId),bk?bk.term:'',bk?bk.session:'',l.date,l.status,COUNTED.includes(l.status)?1:0,l.memo||'']);
+    });
+    downloadCsv(`레슨기록_${todayStr()}.csv`, rows);
+  }else if(type==='progress'){
+    const rows = [['학생ID','학생명','현재기수','진행횟수','잔여회차','기시작일','유효기간마감일','유효기간상태','다음결제필요','예상환불비율']];
+    students.forEach(s=>{
+      const p = progressFor(s.id); if(!p) return;
+      // 엑셀은 "2/4" 같은 값을 날짜(02월 04일)로 자동 변환해버리므로, ="2/4" 형태로 내보내
+      // 엑셀이 수식으로 인식해 그대로 "2/4" 텍스트로 표시되도록 처리합니다.
+      rows.push([s.id,s.name,p.currentTerm,`="${p.progressCount}/4"`,p.remaining,p.startDate||'',p.deadline||'',p.expired?'경과(소멸대상)':'정상',p.needsPayment?'Y':'N',p.refundRate]);
+    });
+    downloadCsv(`진행현황_${todayStr()}.csv`, rows);
+  }
+}
+
+function triggerImport(){
+  document.getElementById('import-file').click();
+}
+
+function importDataFile(fileInput){
+  const file = fileInput.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!confirm('현재 화면의 데이터를 이 백업 파일 내용으로 덮어씁니다. 계속할까요?')) return;
+      students = data.students || [];
+      payments = data.payments || [];
+      lessons = data.lessons || [];
+      manualUnpaid = typeof data.manualUnpaid==='number' ? data.manualUnpaid : 0;
+      seq = data.seq || {s:students.length+1, p:payments.length+1, l:lessons.length+1};
+      renderAll();
+      alert('불러오기가 완료되었습니다.');
+    }catch(err){
+      alert('파일을 읽을 수 없습니다. 이 시스템에서 저장한 백업(.json) 파일이 맞는지 확인해주세요.');
+    }
+  };
+  reader.readAsText(file);
+  fileInput.value = '';
+}
+
+/* ============ 탭 전환 ============ */
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  renderAll();
+}
+
+function renderAll(){
+  renderDashboard();
+  renderStudents();
+  renderPayments();
+  renderLessons();
+  renderProgress();
+  renderSchedule();
+  saveToLocalStorage();
+}
+
+/* ============ 대시보드 ============ */
+function renderDashboard(){
+  const el = document.getElementById('panel-dashboard');
+  el.innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">총 학생 수</div><div class="kpi-value">${totalStudents()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">명</span></div></div>
+      <div class="kpi"><div class="kpi-label">활성 학생</div><div class="kpi-value blue">${activeStudents()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">명</span></div></div>
+      <div class="kpi"><div class="kpi-label">이번 달 매출</div><div class="kpi-value">${fmtMoney(thisMonthRevenue())}</div></div>
+      <div class="kpi manual">
+        <div class="kpi-label">미결제 표시 (수동확인)</div>
+        <input class="kpi-input" type="number" min="0" value="${manualUnpaid}" onchange="manualUnpaid=Number(this.value)||0; renderAll();">
+      </div>
+      <div class="kpi"><div class="kpi-label">결제 필요 학생 (자동)</div><div class="kpi-value" style="color:var(--red);">${studentsNeedingPayment()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">명</span></div></div>
+    </div>
+    <div class="card" style="margin-top:18px;">
+      <div class="card-title">오늘 일정 (${todayLabel()}) <span class="hint">학생관리에 등록된 요일·시간 기준</span></div>
+      ${renderTodaySchedule()}
+    </div>
+    <div class="card" style="margin-top:18px;">
+      <div class="note">은행 입금 내역은 자동 연동되지 않아 '미결제 표시'는 통장 확인 후 직접 입력하는 값입니다. 시스템이 자동 계산한 '결제 필요 학생(자동)' 수와 대조해서 확인하세요.</div>
+      <div class="card-title">겹침(이중예약) 경고</div>
+      ${renderConflictList()}
+    </div>
+  `;
+}
+
+function todayLabel(){
+  const d = new Date();
+  return `${d.getMonth()+1}월 ${d.getDate()}일 (${DOW_KR[d.getDay()]})`;
+}
+function renderTodaySchedule(){
+  const dow = DOW_KR[new Date().getDay()];
+  const todays = students.filter(s=>s.status==='활성' && s.day===dow)
+    .slice().sort((a,b)=> (a.time||'').localeCompare(b.time||''));
+  if(todays.length===0) return `<div class="empty">오늘(${dow}) 예정된 레슨이 없습니다</div>`;
+  return `<table><thead><tr><th>시간</th><th>학생명</th><th>연락처</th><th>레슨시간(분)</th><th>겹침</th></tr></thead><tbody>
+    ${todays.map(s=>{
+      const conflict = hasConflict(s);
+      return `<tr class="${conflict?'conflict':''}"><td><b>${escapeHtml(s.time)}</b></td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.phone||'')}</td><td>${s.duration}</td><td>${conflict?'<span class="badge badge-red">⚠겹침</span>':''}</td></tr>`;
+    }).join('')}
+  </tbody></table>`;
+}
+
+function renderConflictList(){
+  const conflicts = students.filter(s=>hasConflict(s));
+  if(conflicts.length===0) return `<div class="empty">현재 겹치는 예약이 없습니다 ✅</div>`;
+  return `<table><thead><tr><th>학생명</th><th>요일</th><th>시간</th></tr></thead><tbody>
+    ${conflicts.map(s=>`<tr class="conflict"><td>⚠ ${s.name}</td><td>${s.day}</td><td>${s.time}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+/* ============ 학생관리 ============ */
+function renderStudents(){
+  const el = document.getElementById('panel-students');
+  const scrollPos = getScrollPos('panel-students');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">학생 추가 <span class="hint">학생ID는 자동으로 부여됩니다</span></div>
+      <div class="form-grid">
+        <div class="form-field"><label>학생명</label><input id="ns-name" type="text" placeholder="예: 김민준"></div>
+        <div class="form-field"><label>연락처</label><input id="ns-phone" type="text" placeholder="010-0000-0000"></div>
+        <div class="form-field"><label>미성년자여부</label><select id="ns-minor"><option value="N">아니오</option><option value="Y">예</option></select></div>
+        <div class="form-field"><label>등록일</label><input id="ns-reg" type="date" value="${todayStr()}"></div>
+        <div class="form-field"><label>레슨비(1기기준)</label><input id="ns-fee" type="text" inputmode="numeric" placeholder="160,000" oninput="formatMoneyInput(this)"></div>
+        <div class="form-field"><label>수업요일</label><select id="ns-day">${DAYS.map(d=>`<option>${d}</option>`).join('')}</select></div>
+        <div class="form-field"><label>수업시간</label><input id="ns-time" type="text" placeholder="18:00"></div>
+        <div class="form-field"><label>레슨시간(분)</label><input id="ns-dur" type="number" value="60"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-field"><label>법정대리인명 (미성년자만)</label><input id="ns-gname" type="text"></div>
+        <div class="form-field"><label>법정대리인연락처</label><input id="ns-gphone" type="text"></div>
+        <div class="form-field"><label>을과의관계</label><input id="ns-rel" type="text" placeholder="모/부"></div>
+        <div class="form-field"><label>특이사항(건강정보)</label><input id="ns-note" type="text"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addStudent()">+ 학생 추가</button>
+    </div>
+    <div class="card">
+      <div class="card-title">학생 목록 (${students.length}명) <span class="hint">칸을 클릭해 바로 수정할 수 있습니다</span>
+        <button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;" onclick="exportCsv('students')">⬇ CSV 내보내기</button>
+      </div>
+      ${students.length===0 ? '<div class="empty">등록된 학생이 없습니다</div>' : `
+      <div class="table-scroll">
+      <table><thead><tr>
+        <th>학생ID</th><th>학생명</th><th>연락처</th><th>미성년자</th><th>법정대리인</th><th>대리인연락처</th>
+        <th>등록일</th><th>레슨비</th><th>요일</th><th>시간</th><th>분</th><th>상태</th><th>계약서종류</th><th>겹침</th><th></th>
+      </tr></thead><tbody>
+        ${students.map(s=>{
+          const conflict = hasConflict(s);
+          return `<tr class="${conflict?'conflict':''}">
+            <td>${s.id}</td>
+            <td><input class="cell-input" data-fkey="${s.id}:name" type="text" value="${escapeHtml(s.name)}" onchange="updStudent('${s.id}','name',this.value)"></td>
+            <td><input class="cell-input cell-phone" data-fkey="${s.id}:phone" type="text" value="${escapeHtml(s.phone)}" onchange="updStudent('${s.id}','phone',this.value)"></td>
+            <td><select class="cell-select" data-fkey="${s.id}:isMinor" onchange="updStudent('${s.id}','isMinor',this.value==='Y')"><option value="N" ${!s.isMinor?'selected':''}>N</option><option value="Y" ${s.isMinor?'selected':''}>Y</option></select></td>
+            <td><input class="cell-input" data-fkey="${s.id}:guardianName" type="text" value="${escapeHtml(s.guardianName||'')}" onchange="updStudent('${s.id}','guardianName',this.value)"></td>
+            <td><input class="cell-input cell-phone" data-fkey="${s.id}:guardianPhone" type="text" value="${escapeHtml(s.guardianPhone||'')}" onchange="updStudent('${s.id}','guardianPhone',this.value)"></td>
+            <td><input class="cell-input cell-date" data-fkey="${s.id}:regDate" type="date" value="${s.regDate}" onchange="updStudent('${s.id}','regDate',this.value)"></td>
+            <td><input class="cell-input cell-money" data-fkey="${s.id}:fee" type="text" inputmode="numeric" value="${fmtNum(s.fee)}" oninput="formatMoneyInput(this)" onchange="updStudent('${s.id}','fee',parseMoney(this.value))"></td>
+            <td><select class="cell-select" data-fkey="${s.id}:day" onchange="updStudent('${s.id}','day',this.value)">${DAYS.map(d=>`<option ${s.day===d?'selected':''}>${d}</option>`).join('')}</select></td>
+            <td><input class="cell-input" style="min-width:74px;" data-fkey="${s.id}:time" type="text" value="${escapeHtml(s.time)}" onchange="updStudent('${s.id}','time',this.value)"></td>
+            <td><input class="cell-input" style="min-width:60px;" data-fkey="${s.id}:duration" type="number" value="${s.duration}" onchange="updStudent('${s.id}','duration',Number(this.value))"></td>
+            <td><select class="cell-status" data-fkey="${s.id}:status" onchange="updStudent('${s.id}','status',this.value)">
+                <option ${s.status==='활성'?'selected':''}>활성</option>
+                <option ${s.status==='휴면'?'selected':''}>휴면</option>
+                <option ${s.status==='종료'?'selected':''}>종료</option>
+              </select></td>
+            <td>${s.isMinor? '<span class="badge badge-orange">미성년자용</span>' : '<span class="badge badge-gray">성인용</span>'}</td>
+            <td>${conflict? '<span class="badge badge-red">⚠겹침</span>' : '<span class="badge badge-green">-</span>'}</td>
+            <td><button class="btn-del" onclick="delStudent('${s.id}')">삭제</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>
+      </div>`}
+    </div>
+  `;
+  restoreScrollPos('panel-students', scrollPos);
+}
+
+function addStudent(){
+  const name = document.getElementById('ns-name').value.trim();
+  if(!name){ alert('학생명을 입력해주세요.'); return; }
+  const id = 'S' + pad(seq.s++, 3);
+  students.push({
+    id, name,
+    phone: document.getElementById('ns-phone').value,
+    isMinor: document.getElementById('ns-minor').value === 'Y',
+    guardianName: document.getElementById('ns-gname').value,
+    guardianPhone: document.getElementById('ns-gphone').value,
+    relation: document.getElementById('ns-rel').value,
+    note: document.getElementById('ns-note').value,
+    regDate: document.getElementById('ns-reg').value || todayStr(),
+    fee: parseMoney(document.getElementById('ns-fee').value),
+    day: document.getElementById('ns-day').value,
+    time: document.getElementById('ns-time').value,
+    duration: Number(document.getElementById('ns-dur').value) || 60,
+    status: '활성'
+  });
+  renderAll();
+}
+function updStudent(id, field, value){
+  const s = studentById(id); if(!s) return;
+  s[field] = value;
+  renderAll();
+}
+function delStudent(id){
+  if(!confirm('이 학생을 삭제할까요? 연결된 결제/레슨 기록은 남아있지만 학생명이 표시되지 않습니다.')) return;
+  students = students.filter(s=>s.id!==id);
+  renderAll();
+}
+
+/* ============ 결제관리 ============ */
+function renderPayments(){
+  const el = document.getElementById('panel-payments');
+  const scrollPos = getScrollPos('panel-payments');
+  const options = students.map(s=>`<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">결제 추가</div>
+      <div class="form-grid">
+        <div class="form-field"><label>학생</label><select id="np-student">${options || '<option value="">학생을 먼저 등록하세요</option>'}</select></div>
+        <div class="form-field"><label>입금일</label><input id="np-date" type="date" value="${todayStr()}"></div>
+        <div class="form-field"><label>금액</label><input id="np-amount" type="text" inputmode="numeric" placeholder="160,000" oninput="formatMoneyInput(this)"></div>
+        <div class="form-field"><label>결제수단</label><select id="np-method"><option>계좌이체</option><option>현금</option><option>기타</option></select></div>
+        <div class="form-field"><label>결제완료</label><select id="np-completed"><option value="Y">Y</option><option value="N">N</option></select></div>
+      </div>
+      <button class="btn btn-primary" onclick="addPayment()">+ 결제 추가</button>
+    </div>
+    <div class="card">
+      <div class="card-title">결제 내역 (${payments.length}건) <span class="hint">기수는 학생별 결제 등록 순서로 자동 계산되어 읽기 전용으로 표시됩니다</span>
+        <button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;" onclick="exportCsv('payments')">⬇ CSV 내보내기</button>
+      </div>
+      ${payments.length===0 ? '<div class="empty">결제 내역이 없습니다</div>' : `
+      <div class="table-scroll">
+      <table><thead><tr>
+        <th>결제ID</th><th>학생</th><th>입금일</th><th>금액</th><th>수단</th><th>기수(자동)</th><th>완료</th>
+        <th>환불</th><th>환불액</th><th>환불일</th><th>환불사유</th><th></th>
+      </tr></thead><tbody>
+        ${payments.map(p=>`<tr>
+          <td>${p.id}</td>
+          <td style="white-space:nowrap;">${escapeHtml(studentName(p.studentId))}</td>
+          <td><input class="cell-input cell-date" data-fkey="${p.id}:date" type="date" value="${p.date}" onchange="updPayment('${p.id}','date',this.value)"></td>
+          <td><input class="cell-input cell-money" data-fkey="${p.id}:amount" type="text" inputmode="numeric" value="${fmtNum(p.amount)}" oninput="formatMoneyInput(this)" onchange="updPayment('${p.id}','amount',parseMoney(this.value))"></td>
+          <td><select class="cell-select" data-fkey="${p.id}:method" onchange="updPayment('${p.id}','method',this.value)">${['계좌이체','현금','기타'].map(m=>`<option ${p.method===m?'selected':''}>${m}</option>`).join('')}</select></td>
+          <td><span class="badge badge-gray">${paymentRank(p)}번째 결제</span></td>
+          <td><select class="cell-select" data-fkey="${p.id}:completed" onchange="updPayment('${p.id}','completed',this.value)"><option value="Y" ${p.completed==='Y'?'selected':''}>Y</option><option value="N" ${p.completed==='N'?'selected':''}>N</option></select></td>
+          <td><select class="cell-select" data-fkey="${p.id}:refund" onchange="updPayment('${p.id}','refund',this.value)"><option value="N" ${p.refund==='N'?'selected':''}>N</option><option value="Y" ${p.refund==='Y'?'selected':''}>Y</option></select></td>
+          <td><input class="cell-input cell-money" data-fkey="${p.id}:refundAmount" type="text" inputmode="numeric" value="${fmtNum(p.refundAmount)}" oninput="formatMoneyInput(this)" onchange="updPayment('${p.id}','refundAmount',parseMoney(this.value))"></td>
+          <td><input class="cell-input cell-date" data-fkey="${p.id}:refundDate" type="date" value="${p.refundDate}" onchange="updPayment('${p.id}','refundDate',this.value)"></td>
+          <td><textarea class="cell-input cell-reason" data-fkey="${p.id}:refundReason" rows="1" oninput="autoGrow(this)" onchange="updPayment('${p.id}','refundReason',this.value)">${escapeHtml(p.refundReason)}</textarea></td>
+          <td><button class="btn-del" onclick="delPayment('${p.id}')">삭제</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      </div>`}
+    </div>
+  `;
+  restoreScrollPos('panel-payments', scrollPos);
+  el.querySelectorAll('.cell-reason').forEach(autoGrow);
+}
+function addPayment(){
+  const studentId = document.getElementById('np-student').value;
+  if(!studentId){ alert('학생을 먼저 등록해주세요.'); return; }
+  const id = 'P' + pad(seq.p++, 4);
+  payments.push({
+    id, studentId,
+    date: document.getElementById('np-date').value || todayStr(),
+    amount: parseMoney(document.getElementById('np-amount').value),
+    method: document.getElementById('np-method').value,
+    completed: document.getElementById('np-completed').value,
+    refund:'N', refundAmount:0, refundDate:'', refundReason:''
+  });
+  renderAll();
+}
+function updPayment(id, field, value){
+  const p = payments.find(x=>x.id===id); if(!p) return;
+  p[field]=value; renderAll();
+}
+function delPayment(id){
+  if(!confirm('이 결제 내역을 삭제할까요?')) return;
+  payments = payments.filter(p=>p.id!==id);
+  renderAll();
+}
+
+/* ============ 레슨기록 ============ */
+function renderLessons(){
+  const el = document.getElementById('panel-lessons');
+  const scrollPos = getScrollPos('panel-lessons');
+  const options = students.map(s=>`<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">레슨 기록 추가</div>
+      <div class="note">정상출석 / 노쇼 / 당일취소 / 보강완료 — 이 네 가지는 계약서 제9조②에 따라 전부 '진행된 회차'로 계산됩니다. 기수·회차는 입력하지 않아도 등록 즉시 자동으로 계산됩니다.</div>
+      <div class="form-grid">
+        <div class="form-field"><label>학생</label><select id="nl-student">${options || '<option value="">학생을 먼저 등록하세요</option>'}</select></div>
+        <div class="form-field"><label>날짜</label><input id="nl-date" type="date" value="${todayStr()}"></div>
+        <div class="form-field"><label>출석상태</label>
+          <select id="nl-status">
+            <option>정상출석</option><option>노쇼</option><option>당일취소</option><option>보강완료</option><option>취소(사전고지)</option>
+          </select>
+        </div>
+        <div class="form-field" style="grid-column: span 4;"><label>레슨 메모</label><textarea id="nl-memo" class="cell-reason" rows="1" oninput="autoGrow(this)" placeholder="이번 레슨에서 다룬 내용, 특이사항 등"></textarea></div>
+      </div>
+      <button class="btn btn-primary" onclick="addLesson()">+ 레슨기록 추가</button>
+    </div>
+    <div class="card">
+      <div class="card-title">레슨 기록 (${lessons.length}건) <span class="hint">기수·회차는 진행카운트 대상 레슨을 날짜순 4개씩 묶어 자동 계산됩니다(읽기 전용)</span>
+        <button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;" onclick="exportCsv('lessons')">⬇ CSV 내보내기</button>
+      </div>
+      ${lessons.length===0 ? '<div class="empty">레슨 기록이 없습니다</div>' : `
+      <div class="table-scroll">
+      <table><thead><tr><th>기록ID</th><th>학생</th><th>기수</th><th>회차</th><th>날짜</th><th>출석상태</th><th>진행카운트</th><th>메모</th><th></th></tr></thead><tbody>
+        ${lessons.slice().reverse().map(l=>{
+          const bk = lessonBucket(l);
+          return `<tr>
+          <td>${l.id}</td>
+          <td>${studentName(l.studentId)}</td>
+          <td>${bk ? `<span class="badge badge-gray">${bk.term}기</span>` : '-'}</td>
+          <td>${bk ? `<span class="badge badge-gray">${bk.session}회차</span>` : '-'}</td>
+          <td><input class="cell-input" data-fkey="${l.id}:date" type="date" value="${l.date}" onchange="updLesson('${l.id}','date',this.value)"></td>
+          <td><select data-fkey="${l.id}:status" onchange="updLesson('${l.id}','status',this.value)">
+              ${['정상출석','노쇼','당일취소','보강완료','취소(사전고지)'].map(st=>`<option ${l.status===st?'selected':''}>${st}</option>`).join('')}
+            </select></td>
+          <td>${COUNTED.includes(l.status) ? '<span class="badge badge-green">1</span>' : '<span class="badge badge-gray">0</span>'}</td>
+          <td><textarea class="cell-reason" data-fkey="${l.id}:memo" rows="1" oninput="autoGrow(this)" onchange="updLesson('${l.id}','memo',this.value)">${escapeHtml(l.memo||'')}</textarea></td>
+          <td><button class="btn-del" onclick="delLesson('${l.id}')">삭제</button></td>
+        </tr>`;}).join('')}
+      </tbody></table>
+      </div>`}
+    </div>
+  `;
+  restoreScrollPos('panel-lessons', scrollPos);
+  el.querySelectorAll('.cell-reason').forEach(autoGrow);
+}
+function addLesson(){
+  const studentId = document.getElementById('nl-student').value;
+  if(!studentId){ alert('학생을 먼저 등록해주세요.'); return; }
+  const id = 'L' + pad(seq.l++, 5);
+  lessons.push({
+    id, studentId,
+    date: document.getElementById('nl-date').value || todayStr(),
+    status: document.getElementById('nl-status').value,
+    memo: document.getElementById('nl-memo').value
+  });
+  renderAll();
+}
+function updLesson(id, field, value){
+  const l = lessons.find(x=>x.id===id); if(!l) return;
+  l[field]=value; renderAll();
+}
+function delLesson(id){
+  if(!confirm('이 레슨 기록을 삭제할까요?')) return;
+  lessons = lessons.filter(l=>l.id!==id);
+  renderAll();
+}
+
+/* ============ 진행현황 ============ */
+function renderProgress(){
+  const el = document.getElementById('panel-progress');
+  const scrollPos = getScrollPos('panel-progress');
+  const rows = students.map(s=>({s, p: progressFor(s.id)})).filter(r=>r.p);
+  el.innerHTML = `
+    <div class="card">
+      <div class="note">계약서 제9조 환불 기준표(1/3 경과 전 2/3환불, 1/2 경과 전 1/2환불, 그 이후 환불없음)를 학생별로 자동 계산합니다. 갑 귀책으로 지연·미진행된 경우는 제9조③(전액환불)이 별도로 적용되니, 아래 비율은 을 귀책 중도포기 기준으로만 참고하세요.</div>
+      <div class="card-title">학생별 진행현황 (${rows.length}건)
+        <button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;" onclick="exportCsv('progress')">⬇ CSV 내보내기</button>
+      </div>
+      ${rows.length===0 ? '<div class="empty">레슨 기록이 있는 학생이 없습니다</div>' : `
+      <div class="table-scroll">
+      <table><thead><tr>
+        <th>학생ID</th><th>학생명</th><th>현재기수</th><th>진행횟수</th><th>잔여회차</th>
+        <th>기시작일</th><th>유효기간마감일</th><th>유효기간상태</th><th>다음결제필요</th><th>예상환불비율</th><th></th>
+      </tr></thead><tbody>
+        ${rows.map(({s,p})=>`<tr class="${p.expired?'expired':''}">
+          <td>${s.id}</td><td>${s.name}</td><td>${p.currentTerm}기</td><td>${p.progressCount}/4</td><td>${p.remaining}</td>
+          <td>${p.startDate||'-'}</td><td>${p.deadline||'-'}</td>
+          <td>${p.expired? '<span class="badge badge-orange">경과(소멸대상)</span>' : '<span class="badge badge-green">정상</span>'}</td>
+          <td>${p.needsPayment? '<span class="badge badge-red">Y</span>' : '<span class="badge badge-gray">N</span>'}</td>
+          <td><b>${p.refundRate}</b></td>
+          <td><button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;" onclick="openReport('${s.id}')">📄 리포트</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      </div>`}
+    </div>
+  `;
+  restoreScrollPos('panel-progress', scrollPos);
+}
+
+/* ============ 주간일정 (학생관리 데이터로 자동 렌더링) ============ */
+function timeToMinutes(t){
+  const m = /^(\d{1,2}):(\d{2})$/.exec((t||'').trim());
+  if(!m) return null;
+  return Number(m[1])*60 + Number(m[2]);
+}
+function renderSchedule(){
+  const el = document.getElementById('panel-schedule');
+  const startMin = 9*60, endMin = 22*60, step = 30;
+  const slots = [];
+  for(let t=startMin; t<endMin; t+=step) slots.push(t);
+
+  // 각 학생을 슬롯에 배치
+  const occupied = {}; // "day|slot" -> [studentNames]
+  students.filter(s=>s.status==='활성').forEach(s=>{
+    const start = timeToMinutes(s.time);
+    if(start===null || !DAYS.includes(s.day)) return;
+    const dur = Number(s.duration)||60;
+    const slotCount = Math.max(1, Math.ceil(dur/step));
+    for(let i=0;i<slotCount;i++){
+      const slot = start + i*step;
+      const key = s.day+'|'+slot;
+      if(!occupied[key]) occupied[key]=[];
+      occupied[key].push(s.name);
+    }
+  });
+
+  let grid = `<div class="schedule-grid">`;
+  grid += `<div class="sg-cell sg-head">시간</div>`;
+  DAYS.forEach(d=> grid += `<div class="sg-cell sg-head">${d}</div>`);
+  slots.forEach(slot=>{
+    const hh = String(Math.floor(slot/60)).padStart(2,'0');
+    const mm = String(slot%60).padStart(2,'0');
+    grid += `<div class="sg-cell sg-time">${hh}:${mm}</div>`;
+    DAYS.forEach(d=>{
+      const names = occupied[d+'|'+slot] || [];
+      const conflict = names.length>1;
+      const cls = conflict ? 'sg-cell sg-conflict' : (names.length? 'sg-cell sg-lesson':'sg-cell');
+      grid += `<div class="${cls}">${names.join(', ')}</div>`;
+    });
+  });
+  grid += `</div>`;
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="note">학생관리에 입력된 요일·시간·레슨시간을 기준으로 자동으로 그려집니다. 직접 칸을 채울 필요가 없고, 겹치는 시간은 빨간색으로 자동 표시됩니다. 운영시간은 09:00~22:00 기준입니다(다르면 알려주시면 조정해 드립니다).</div>
+      <div class="table-scroll">${grid}</div>
+    </div>
+  `;
+}
+
+/* ============ 학생별 레슨 여정 리포트 (PDF 인쇄) ============ */
+let reportStudentId = null;
+
+function openReport(studentId){
+  reportStudentId = studentId;
+  document.getElementById('rp-type').value = 'all';
+  document.getElementById('rp-year').value = new Date().getFullYear();
+  document.getElementById('rp-quarter').value = String(Math.ceil((new Date().getMonth()+1)/3));
+  document.getElementById('rp-month').value = String(new Date().getMonth()+1);
+  document.getElementById('report-modal').style.display = 'flex';
+  renderReportContent();
+}
+function closeReport(){
+  document.getElementById('report-modal').style.display = 'none';
+  reportStudentId = null;
+}
+function printReport(){
+  // 브라우저 인쇄 시 상단에 자동으로 붙는 제목(문서 title)에 '레슨 관리 시스템'이 노출되지 않도록
+  // 인쇄 직전에만 학생명 기반 제목으로 바꿨다가 인쇄 후 원래 제목으로 되돌립니다.
+  const original = document.title;
+  const s = studentById(reportStudentId);
+  document.title = s ? `${s.name} 레슨 리포트` : '레슨 리포트';
+  const restore = () => { document.title = original; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
+  window.print();
+  setTimeout(restore, 1500); // afterprint 미지원 환경 대비
+}
+function reportPeriodLabel(type, year, quarter, month){
+  if(type==='year') return `${year}년`;
+  if(type==='quarter') return `${year}년 ${quarter}분기`;
+  if(type==='month') return `${year}년 ${month}월`;
+  return '전체 기간';
+}
+function lessonInPeriod(dateStr, type, year, quarter, month){
+  if(type==='all') return true;
+  if(!dateStr) return false;
+  const [y, m] = dateStr.split('-').map(Number);
+  if(type==='year') return y===year;
+  if(type==='quarter') return y===year && Math.ceil(m/3)===quarter;
+  if(type==='month') return y===year && m===month;
+  return true;
+}
+function renderReportContent(){
+  const area = document.getElementById('report-print-area');
+  if(!area || !reportStudentId) return;
+  const s = studentById(reportStudentId);
+  const type = document.getElementById('rp-type').value;
+  document.getElementById('rp-quarter-field').style.display = type==='quarter' ? '' : 'none';
+  document.getElementById('rp-month-field').style.display = type==='month' ? '' : 'none';
+  document.getElementById('rp-year').closest('.form-field').style.display = type==='all' ? 'none' : '';
+  if(!s){ area.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다(삭제된 학생일 수 있습니다)</div>'; return; }
+
+  const year = Number(document.getElementById('rp-year').value) || new Date().getFullYear();
+  const quarter = Number(document.getElementById('rp-quarter').value) || 1;
+  const month = Number(document.getElementById('rp-month').value) || 1;
+  const periodLabel = reportPeriodLabel(type, year, quarter, month);
+
+  const allLessons = lessons.filter(l=>l.studentId===reportStudentId)
+    .slice().sort((a,b)=> (a.date||'').localeCompare(b.date||'') || a.id.localeCompare(b.id));
+  const periodLessons = allLessons.filter(l=> lessonInPeriod(l.date, type, year, quarter, month));
+  const p = progressFor(reportStudentId);
+
+  area.innerHTML = `
+    <div class="rp-title">🎤 레슨 여정 리포트</div>
+    <div class="rp-sub">문영성(루나틱) 보컬레슨</div>
+    <div class="rp-meta">
+      <div>학생명: <b>${escapeHtml(s.name)}</b> (${s.id})</div>
+      <div>조회 기간: <b>${periodLabel}</b></div>
+      <div>등록일: ${s.regDate}</div>
+      <div>현재기수: ${p? p.currentTerm+'기 ('+p.progressCount+'/4)' : '-'}</div>
+      <div>레슨비: ${fmtMoney(s.fee)}</div>
+      <div>리포트 생성일: ${todayStr()}</div>
+    </div>
+    <div class="card-title" style="font-size:14px;">기간 내 레슨 기록 (${periodLessons.length}건)</div>
+    ${periodLessons.length===0 ? '<div class="empty">해당 기간에 레슨 기록이 없습니다</div>' : `
+    <table><thead><tr><th>날짜</th><th>기수/회차</th><th>출석상태</th><th>메모</th></tr></thead><tbody>
+      ${periodLessons.map(l=>{
+        const bk = lessonBucket(l);
+        return `<tr><td>${l.date}</td><td>${bk? bk.term+'기 '+bk.session+'회차' : '-'}</td><td>${escapeHtml(l.status)}</td><td>${escapeHtml(l.memo||'')}</td></tr>`;
+      }).join('')}
+    </tbody></table>`}
+  `;
+}
+
+/* ============ 초기 렌더 ============ */
+loadFromLocalStorage();
+renderAll();
+</script>
+</body>
+</html>
