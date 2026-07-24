@@ -81,11 +81,18 @@
 
   .table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  /* width:100%만 쓰면 좁은 화면에서 표(학생관리/결제관리/레슨기록/진행현황)가 강제로 눌려
+     글자가 세로로 줄바꿈됩니다. 내용이 필요한 만큼(max-content)은 확보하되, 공간이 남으면
+     100%까지 채우도록(min-width) 해서 넓은 화면에서는 예전처럼 꽉 차 보이고, 좁은 화면에서는
+     억지로 눌리지 않고 옆으로 스크롤되게 합니다. (리포트 인쇄용 표처럼 문단을 감싸야 하는
+     곳은 이 규칙에서 제외하기 위해 .table-scroll 안의 표에만 적용합니다.) */
+  .table-scroll table{ width:max-content; min-width:100%; }
   thead th{
     text-align:left; padding:10px 10px; color:var(--text-sub); font-weight:700; font-size:12.5px;
     border-bottom:1px solid var(--border); white-space:nowrap;
   }
   tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .table-scroll tbody td{ white-space:nowrap; }
   tbody tr:hover{ background:#FAFBFC; }
   tbody tr.conflict{ background:var(--red-light); }
   tbody tr.expired{ background:var(--orange-light); }
@@ -93,6 +100,7 @@
   input[type=text], input[type=number], input[type=date], select{
     width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:8px;
     font-size:13px; font-family:inherit; background:#fff; color:var(--text);
+    min-height:36px; line-height:1.3; box-sizing:border-box;
   }
   input:focus, select:focus{ outline:none; border-color:var(--blue); }
   select{ padding-right:26px; } /* 네이티브 드롭다운 화살표와 글자가 겹치지 않도록 오른쪽 여백 확보 */
@@ -192,6 +200,16 @@
 
     .form-grid{ grid-template-columns:1fr; gap:10px; }
 
+    /* 아이폰/모바일 브라우저는 날짜 입력칸(input[type=date])을 자체 스타일로 그려서
+       다른 입력칸보다 두께(높이)가 달라 보입니다. 자체 스타일을 끄고 다른 입력칸과
+       똑같은 높이를 강제로 맞춥니다. PC(윈도우)의 달력 아이콘 모양에는 영향 없도록
+       모바일 화면(이 미디어쿼리) 안에서만 적용합니다. */
+    input[type=text], input[type=number], input[type=date], select{ min-height:40px; }
+    input[type=date]{
+      -webkit-appearance:none;
+      appearance:none;
+    }
+
     table{ font-size:12.5px; }
 
     /* 표는 세로로 욱여넣지 않고, 기존처럼 옆으로 스크롤하는 방식을 그대로 유지합니다
@@ -216,9 +234,11 @@
     </div>
     <div class="save-box">
       <div id="save-indicator" class="save-indicator">저장 준비 중...</div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn btn-ghost" onclick="exportData()">⬇ 백업 저장</button>
-        <button class="btn btn-ghost" onclick="triggerImport()">⬆ 백업 불러오기</button>
+      <div id="backup-location-indicator" class="save-indicator" style="color:var(--text-sub); display:none;"></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="saveBackupSmart()">💾 백업 저장</button>
+        <button id="btn-backup-relocate" class="btn btn-ghost" style="display:none;" onclick="saveBackupAs()">📁 새 위치에 저장</button>
+        <button class="btn btn-ghost" onclick="importBackupSmart()">⬆ 백업 불러오기</button>
         <input id="import-file" type="file" accept="application/json" style="display:none" onchange="importDataFile(this)">
       </div>
     </div>
@@ -275,12 +295,11 @@ let students = [
   { id:'S001', name:'홍길동(예시)', phone:'010-0000-0000', isMinor:false, guardianName:'', guardianPhone:'', relation:'', note:'특이사항 없음', regDate:'2026-07-01', fee:160000, day:'화', time:'18:00', duration:60, status:'활성' }
 ];
 let payments = [
-  { id:'P0001', studentId:'S001', date:'2026-07-01', amount:160000, method:'계좌이체', completed:'Y', refund:'N', refundAmount:0, refundDate:'', refundReason:'' }
+  { id:'P0001', studentId:'S001', date:'2026-07-01', amount:160000, method:'계좌이체', refund:'N', refundAmount:0, refundDate:'', refundReason:'' }
 ];
 let lessons = [
   { id:'L00001', studentId:'S001', date:'2026-07-08', status:'정상출석', memo:'' }
 ];
-let manualUnpaid = 0;
 let seq = { s:2, p:2, l:2 };
 
 const COUNTED = ['정상출석','노쇼','당일취소','보강완료'];
@@ -402,25 +421,31 @@ function progressFor(studentId){
   if(payList.length===0 && countedList.length===0) return null;
 
   const totalCounted = countedList.length;
-  const bucketTerm = totalCounted>0 ? Math.ceil(totalCounted/4) : 0;
-  const currentTerm = Math.max(payList.length, bucketTerm, 1);
+  const paidTerms = payList.length;
+  // "현재기수"는 레슨 진행 개수가 아니라 결제 건수 기준으로만 정합니다.
+  // (레슨기록 탭의 기수/회차 배지는 지금처럼 4개씩 묶어서 계속 늘어나는 별개의 '순번 표시'이고,
+  //  여기 진행현황의 기수는 '결제한 만큼'을 나타내는 값이라 서로 목적이 다릅니다.
+  //  결제 없이 레슨이 더 진행되면 두 값이 잠시 달라질 수 있는데, 그 차이 자체가 "결제가 밀렸다"는 신호입니다.)
+  const currentTerm = Math.max(paidTerms, 1);
 
-  // 현재 기수에 해당하는 진행횟수만 다시 산정 (기수가 늘어나면 이전 기수분은 자동으로 차감됨)
   const progressCount = Math.max(0, Math.min(4, totalCounted - (currentTerm-1)*4));
   const remaining = Math.max(0, 4-progressCount);
+  // 결제한 것(paidTerms*4)보다 더 많이 진행된 회차 수 = 미결제 상태로 진행된 회차 수
+  const overdueCount = Math.max(0, totalCounted - paidTerms*4);
 
-  const pay = payList[currentTerm-1]; // 현재 기수에 대응하는 결제 (아직 결제 전이면 undefined)
+  const pay = payList[currentTerm-1]; // 현재(결제 기준) 기수에 대응하는 결제 (아직 결제 전이면 undefined)
   const startDate = pay ? pay.date : null;
   const deadline = startDate ? addMonths(startDate, 2) : null;
   const expired = deadline ? (todayStr() > deadline && remaining>0) : false;
-  const needsPayment = progressCount >= 4;
+  // 레슨이 쌓여도 리셋되지 않는 결제필요 판단: "결제한 만큼(현재기수*4)을 이미 다 썼는가"만 봅니다.
+  const needsPayment = totalCounted >= currentTerm*4;
   const noPaymentForCurrentTerm = !pay;
   let refundRate;
   if(progressCount===0) refundRate='100%';
   else if(progressCount===1) refundRate='66.7%(2/3)';
   else if(progressCount===2) refundRate='50%(1/2)';
   else refundRate='0%(환불없음)';
-  return {currentTerm, progressCount, remaining, startDate, deadline, expired, needsPayment, refundRate, noPaymentForCurrentTerm};
+  return {currentTerm, progressCount, remaining, overdueCount, startDate, deadline, expired, needsPayment, refundRate, noPaymentForCurrentTerm};
 }
 
 function hasConflict(student){
@@ -438,6 +463,9 @@ function thisMonthRevenue(){
 function studentsNeedingPayment(){
   return students.filter(s=>{ const p = progressFor(s.id); return p && p.needsPayment; }).length;
 }
+function totalOverdueSessions(){
+  return students.reduce((sum,s)=>{ const p = progressFor(s.id); return sum + (p ? p.overdueCount : 0); }, 0);
+}
 
 /* ============ 저장 (브라우저 로컬 자동저장 + 백업 파일) ============ */
 const STORAGE_KEY = 'lesson_mgmt_v1';
@@ -445,7 +473,7 @@ let storageAvailable = true;
 
 function saveToLocalStorage(){
   try{
-    const data = { students, payments, lessons, manualUnpaid, seq };
+    const data = { students, payments, lessons, seq };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     storageAvailable = true;
   }catch(e){
@@ -462,7 +490,7 @@ function loadFromLocalStorage(){
     if(data.students) students = data.students;
     if(data.payments) payments = data.payments;
     if(data.lessons) lessons = data.lessons;
-    if(typeof data.manualUnpaid === 'number') manualUnpaid = data.manualUnpaid;
+    // 예전 버전 백업에 manualUnpaid가 남아있어도 더 이상 쓰지 않으므로 무시합니다.
     if(data.seq) seq = data.seq;
     return true;
   }catch(e){ return false; }
@@ -481,8 +509,15 @@ function updateSaveIndicator(){
   }
 }
 
+function backupPayload(){
+  return { students, payments, lessons, seq, exportedAt: new Date().toISOString() };
+}
+
+/* 기존 방식: 클릭할 때마다 브라우저 기본 다운로드 폴더로 새 파일을 내려받습니다.
+   사파리(아이폰/아이패드/맥)는 아래의 "저장 위치를 직접 고르는" 방식을 지원하지 않아서
+   이 방식이 사파리에서의 기본 동작이 됩니다. */
 function exportData(){
-  const data = { students, payments, lessons, manualUnpaid, seq, exportedAt: new Date().toISOString() };
+  const data = backupPayload();
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -492,6 +527,71 @@ function exportData(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/* ============ 저장 위치를 직접 지정해서 저장 (File System Access API) ============
+   크롬/엣지(이 앱을 실행하는 윈도우용 exe도 엣지 기반이라 여기 해당) 등 크로미움 계열
+   브라우저에서만 지원됩니다. 사파리(아이폰 등)는 이 기능을 지원하지 않아 자동으로
+   기존 다운로드 방식(exportData)으로 대신합니다. */
+const hasFSAccess = (typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function');
+let backupFileHandle = null; // 한 번 지정/불러온 백업 파일을 이 세션 동안 기억해뒀다가 다음 저장부터는 같은 파일에 덮어씁니다.
+
+async function writeBackupToHandle(handle){
+  if(await handle.queryPermission({mode:'readwrite'}) !== 'granted'){
+    if(await handle.requestPermission({mode:'readwrite'}) !== 'granted'){
+      alert('파일 쓰기 권한이 없어 저장하지 못했습니다. 다시 시도하거나 "새 위치에 저장"으로 다시 지정해주세요.');
+      return false;
+    }
+  }
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(backupPayload(), null, 2));
+  await writable.close();
+  return true;
+}
+
+function updateBackupLocationIndicator(){
+  const el = document.getElementById('backup-location-indicator');
+  const relocateBtn = document.getElementById('btn-backup-relocate');
+  if(!el) return;
+  if(backupFileHandle){
+    const now = new Date();
+    el.style.display = '';
+    el.textContent = `📎 "${backupFileHandle.name}" 파일에 저장 중 · ${now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
+    if(relocateBtn) relocateBtn.style.display = '';
+  }else{
+    el.style.display = 'none';
+    if(relocateBtn) relocateBtn.style.display = 'none';
+  }
+}
+
+/* 저장 위치를 새로 고릅니다("다른 이름으로 저장"과 같은 동작). 처음 한 번 이걸로 위치를
+   지정해두면, 이후에는 "백업 저장" 버튼을 눌러도 같은 파일에 곧바로 덮어써집니다. */
+async function saveBackupAs(){
+  if(!hasFSAccess){ exportData(); return; }
+  try{
+    const handle = await window.showSaveFilePicker({
+      suggestedName: `레슨관리_백업_${todayStr()}.json`,
+      types: [{ description:'레슨 관리 백업 파일', accept:{'application/json':['.json']} }]
+    });
+    backupFileHandle = handle;
+    const ok = await writeBackupToHandle(handle);
+    if(ok) updateBackupLocationIndicator();
+  }catch(e){
+    if(e.name !== 'AbortError') alert('저장 위치를 지정하는 중 문제가 발생했습니다: ' + e.message);
+  }
+}
+
+/* 저장 버튼의 기본 동작: 이미 지정해둔 백업 파일이 있으면 그 파일에 바로 덮어쓰고,
+   없으면(이번 세션 첫 저장) 저장 위치를 먼저 물어봅니다. 이 기능을 지원하지 않는
+   브라우저(사파리 등)에서는 기존처럼 다운로드 폴더로 내려받습니다. */
+async function saveBackupSmart(){
+  if(!hasFSAccess){ exportData(); return; }
+  if(backupFileHandle){
+    const ok = await writeBackupToHandle(backupFileHandle);
+    if(ok) updateBackupLocationIndicator();
+  }else{
+    await saveBackupAs();
+  }
 }
 
 /* ============ CSV 내보내기 (엑셀에서 바로 열리도록 UTF-8 BOM 포함) ============ */
@@ -515,8 +615,8 @@ function exportCsv(type){
     students.forEach(s=> rows.push([s.id,s.name,s.phone,s.isMinor?'Y':'N',s.guardianName,s.guardianPhone,s.relation,s.note,s.regDate,s.fee,s.day,s.time,s.duration,s.status]));
     downloadCsv(`학생목록_${todayStr()}.csv`, rows);
   }else if(type==='payments'){
-    const rows = [['결제ID','학생ID','학생명','입금일','금액','수단','기수(자동)','완료','환불','환불액','환불일','환불사유']];
-    payments.forEach(p=> rows.push([p.id,p.studentId,studentName(p.studentId),p.date,p.amount,p.method,paymentRank(p),p.completed,p.refund,p.refundAmount,p.refundDate,p.refundReason]));
+    const rows = [['결제ID','학생ID','학생명','입금일','금액','수단','기수(자동)','환불','환불액','환불일','환불사유']];
+    payments.forEach(p=> rows.push([p.id,p.studentId,studentName(p.studentId),p.date,p.amount,p.method,paymentRank(p),p.refund,p.refundAmount,p.refundDate,p.refundReason]));
     downloadCsv(`결제내역_${todayStr()}.csv`, rows);
   }else if(type==='lessons'){
     const rows = [['기록ID','학생ID','학생명','기수(자동)','회차(자동)','날짜','출석상태','진행카운트','메모']];
@@ -526,12 +626,12 @@ function exportCsv(type){
     });
     downloadCsv(`레슨기록_${todayStr()}.csv`, rows);
   }else if(type==='progress'){
-    const rows = [['학생ID','학생명','현재기수','진행횟수','잔여회차','기시작일','유효기간마감일','유효기간상태','다음결제필요','예상환불비율']];
+    const rows = [['학생ID','학생명','현재기수','진행횟수','잔여회차','밀린회차','기시작일','유효기간마감일','유효기간상태','다음결제필요','예상환불비율']];
     students.forEach(s=>{
       const p = progressFor(s.id); if(!p) return;
       // 엑셀은 "2/4" 같은 값을 날짜(02월 04일)로 자동 변환해버리므로, ="2/4" 형태로 내보내
       // 엑셀이 수식으로 인식해 그대로 "2/4" 텍스트로 표시되도록 처리합니다.
-      rows.push([s.id,s.name,p.currentTerm,`="${p.progressCount}/4"`,p.remaining,p.startDate||'',p.deadline||'',p.expired?'경과(소멸대상)':'정상',p.needsPayment?'Y':'N',p.refundRate]);
+      rows.push([s.id,s.name,p.currentTerm,`="${p.progressCount}/4"`,p.remaining,p.overdueCount,p.startDate||'',p.deadline||'',p.expired?'경과(소멸대상)':'정상',p.needsPayment?'Y':'N',p.refundRate]);
     });
     downloadCsv(`진행현황_${todayStr()}.csv`, rows);
   }
@@ -541,6 +641,16 @@ function triggerImport(){
   document.getElementById('import-file').click();
 }
 
+function applyImportedBackup(data){
+  if(!confirm('현재 화면의 데이터를 이 백업 파일 내용으로 덮어씁니다. 계속할까요?')) return false;
+  students = data.students || [];
+  payments = data.payments || [];
+  lessons = data.lessons || [];
+  seq = data.seq || {s:students.length+1, p:payments.length+1, l:lessons.length+1};
+  renderAll();
+  return true;
+}
+
 function importDataFile(fileInput){
   const file = fileInput.files[0];
   if(!file) return;
@@ -548,20 +658,38 @@ function importDataFile(fileInput){
   reader.onload = function(e){
     try{
       const data = JSON.parse(e.target.result);
-      if(!confirm('현재 화면의 데이터를 이 백업 파일 내용으로 덮어씁니다. 계속할까요?')) return;
-      students = data.students || [];
-      payments = data.payments || [];
-      lessons = data.lessons || [];
-      manualUnpaid = typeof data.manualUnpaid==='number' ? data.manualUnpaid : 0;
-      seq = data.seq || {s:students.length+1, p:payments.length+1, l:lessons.length+1};
-      renderAll();
-      alert('불러오기가 완료되었습니다.');
+      if(applyImportedBackup(data)) alert('불러오기가 완료되었습니다.');
     }catch(err){
       alert('파일을 읽을 수 없습니다. 이 시스템에서 저장한 백업(.json) 파일이 맞는지 확인해주세요.');
     }
   };
   reader.readAsText(file);
   fileInput.value = '';
+}
+
+/* 불러오기 버튼의 기본 동작: 크로미움 계열 브라우저에서는 파일탐색기(탐색기/Finder) 대화상자로
+   백업 파일을 고르게 하고, 그렇게 고른 파일을 이후 "백업 저장" 버튼이 덮어쓸 대상으로도
+   기억해둡니다(불러온 파일에 이어서 계속 저장하고 싶을 때 유용합니다). 사파리 등 지원하지
+   않는 브라우저에서는 기존의 파일 선택창(input type=file)으로 대신합니다. */
+async function importBackupSmart(){
+  if(!hasFSAccess){ triggerImport(); return; }
+  try{
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description:'레슨 관리 백업 파일', accept:{'application/json':['.json']} }],
+      multiple:false
+    });
+    const file = await handle.getFile();
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(applyImportedBackup(data)){
+      backupFileHandle = handle; // 앞으로의 "백업 저장"은 방금 불러온 이 파일에 이어서 덮어씁니다.
+      updateBackupLocationIndicator();
+      alert('불러오기가 완료되었습니다. 이제부터 "백업 저장"을 누르면 이 파일에 이어서 저장됩니다.');
+    }
+  }catch(e){
+    if(e.name === 'AbortError') return;
+    alert('파일을 읽을 수 없습니다. 이 시스템에서 저장한 백업(.json) 파일이 맞는지 확인해주세요.');
+  }
 }
 
 /* ============ 탭 전환 ============ */
@@ -590,18 +718,15 @@ function renderDashboard(){
       <div class="kpi"><div class="kpi-label">총 학생 수</div><div class="kpi-value">${totalStudents()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">명</span></div></div>
       <div class="kpi"><div class="kpi-label">활성 학생</div><div class="kpi-value blue">${activeStudents()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">명</span></div></div>
       <div class="kpi"><div class="kpi-label">이번 달 매출</div><div class="kpi-value">${fmtMoney(thisMonthRevenue())}</div></div>
-      <div class="kpi manual">
-        <div class="kpi-label">미결제 표시 (수동확인)</div>
-        <input class="kpi-input" type="number" min="0" value="${manualUnpaid}" onchange="manualUnpaid=Number(this.value)||0; renderAll();">
-      </div>
       <div class="kpi"><div class="kpi-label">결제 필요 학생 (자동)</div><div class="kpi-value" style="color:var(--red);">${studentsNeedingPayment()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">명</span></div></div>
+      <div class="kpi"><div class="kpi-label">밀린 회차 (자동)</div><div class="kpi-value" style="color:var(--red);">${totalOverdueSessions()}<span style="font-size:14px;color:var(--text-sub);font-weight:600;">회</span></div></div>
     </div>
     <div class="card" style="margin-top:18px;">
       <div class="card-title">오늘 일정 (${todayLabel()}) <span class="hint">학생관리에 등록된 요일·시간 기준</span></div>
       ${renderTodaySchedule()}
     </div>
     <div class="card" style="margin-top:18px;">
-      <div class="note">은행 입금 내역은 자동 연동되지 않아 '미결제 표시'는 통장 확인 후 직접 입력하는 값입니다. 시스템이 자동 계산한 '결제 필요 학생(자동)' 수와 대조해서 확인하세요.</div>
+      <div class="note">결제·레슨 기록을 기준으로 자동 계산됩니다(수기 입력 없음). "결제 필요 학생"은 결제한 만큼(1기 4회)을 이미 다 쓴 학생 수이고, "밀린 회차"는 그중 결제 없이 추가로 진행된 회차 수입니다. 레슨 기록이 더 쌓여도 리셋되지 않고, 해당 학생의 결제를 등록해야 줄어듭니다.</div>
       <div class="card-title">겹침(이중예약) 경고</div>
       ${renderConflictList()}
     </div>
@@ -744,7 +869,6 @@ function renderPayments(){
         <div class="form-field"><label>입금일</label><input id="np-date" type="date" value="${todayStr()}"></div>
         <div class="form-field"><label>금액</label><input id="np-amount" type="text" inputmode="numeric" placeholder="160,000" oninput="formatMoneyInput(this)"></div>
         <div class="form-field"><label>결제수단</label><select id="np-method"><option>계좌이체</option><option>현금</option><option>기타</option></select></div>
-        <div class="form-field"><label>결제완료</label><select id="np-completed"><option value="Y">Y</option><option value="N">N</option></select></div>
       </div>
       <button class="btn btn-primary" onclick="addPayment()">+ 결제 추가</button>
     </div>
@@ -755,7 +879,7 @@ function renderPayments(){
       ${payments.length===0 ? '<div class="empty">결제 내역이 없습니다</div>' : `
       <div class="table-scroll">
       <table><thead><tr>
-        <th>결제ID</th><th>학생</th><th>입금일</th><th>금액</th><th>수단</th><th>기수(자동)</th><th>완료</th>
+        <th>결제ID</th><th>학생</th><th>입금일</th><th>금액</th><th>수단</th><th>기수(자동)</th>
         <th>환불</th><th>환불액</th><th>환불일</th><th>환불사유</th><th></th>
       </tr></thead><tbody>
         ${payments.map(p=>`<tr>
@@ -765,7 +889,6 @@ function renderPayments(){
           <td><input class="cell-input cell-money" data-fkey="${p.id}:amount" type="text" inputmode="numeric" value="${fmtNum(p.amount)}" oninput="formatMoneyInput(this)" onchange="updPayment('${p.id}','amount',parseMoney(this.value))"></td>
           <td><select class="cell-select" data-fkey="${p.id}:method" onchange="updPayment('${p.id}','method',this.value)">${['계좌이체','현금','기타'].map(m=>`<option ${p.method===m?'selected':''}>${m}</option>`).join('')}</select></td>
           <td><span class="badge badge-gray">${paymentRank(p)}번째 결제</span></td>
-          <td><select class="cell-select" data-fkey="${p.id}:completed" onchange="updPayment('${p.id}','completed',this.value)"><option value="Y" ${p.completed==='Y'?'selected':''}>Y</option><option value="N" ${p.completed==='N'?'selected':''}>N</option></select></td>
           <td><select class="cell-select" data-fkey="${p.id}:refund" onchange="updPayment('${p.id}','refund',this.value)"><option value="N" ${p.refund==='N'?'selected':''}>N</option><option value="Y" ${p.refund==='Y'?'selected':''}>Y</option></select></td>
           <td><input class="cell-input cell-money" data-fkey="${p.id}:refundAmount" type="text" inputmode="numeric" value="${fmtNum(p.refundAmount)}" oninput="formatMoneyInput(this)" onchange="updPayment('${p.id}','refundAmount',parseMoney(this.value))"></td>
           <td><input class="cell-input cell-date" data-fkey="${p.id}:refundDate" type="date" value="${p.refundDate}" onchange="updPayment('${p.id}','refundDate',this.value)"></td>
@@ -788,7 +911,6 @@ function addPayment(){
     date: document.getElementById('np-date').value || todayStr(),
     amount: parseMoney(document.getElementById('np-amount').value),
     method: document.getElementById('np-method').value,
-    completed: document.getElementById('np-completed').value,
     refund:'N', refundAmount:0, refundDate:'', refundReason:''
   });
   renderAll();
@@ -838,7 +960,7 @@ function renderLessons(){
           <td>${studentName(l.studentId)}</td>
           <td>${bk ? `<span class="badge badge-gray">${bk.term}기</span>` : '-'}</td>
           <td>${bk ? `<span class="badge badge-gray">${bk.session}회차</span>` : '-'}</td>
-          <td><input class="cell-input" data-fkey="${l.id}:date" type="date" value="${l.date}" onchange="updLesson('${l.id}','date',this.value)"></td>
+          <td><input class="cell-input cell-date" data-fkey="${l.id}:date" type="date" value="${l.date}" onchange="updLesson('${l.id}','date',this.value)"></td>
           <td><select data-fkey="${l.id}:status" onchange="updLesson('${l.id}','status',this.value)">
               ${['정상출석','노쇼','당일취소','보강완료','취소(사전고지)'].map(st=>`<option ${l.status===st?'selected':''}>${st}</option>`).join('')}
             </select></td>
@@ -889,11 +1011,12 @@ function renderProgress(){
       ${rows.length===0 ? '<div class="empty">레슨 기록이 있는 학생이 없습니다</div>' : `
       <div class="table-scroll">
       <table><thead><tr>
-        <th>학생ID</th><th>학생명</th><th>현재기수</th><th>진행횟수</th><th>잔여회차</th>
+        <th>학생ID</th><th>학생명</th><th>현재기수</th><th>진행횟수</th><th>잔여회차</th><th>밀린회차</th>
         <th>기시작일</th><th>유효기간마감일</th><th>유효기간상태</th><th>다음결제필요</th><th>예상환불비율</th><th></th>
       </tr></thead><tbody>
-        ${rows.map(({s,p})=>`<tr class="${p.expired?'expired':''}">
+        ${rows.map(({s,p})=>`<tr class="${p.overdueCount>0?'conflict':(p.expired?'expired':'')}">
           <td>${s.id}</td><td>${s.name}</td><td>${p.currentTerm}기</td><td>${p.progressCount}/4</td><td>${p.remaining}</td>
+          <td>${p.overdueCount>0 ? `<span class="badge badge-red">${p.overdueCount}회 밀림</span>` : '<span class="badge badge-gray">-</span>'}</td>
           <td>${p.startDate||'-'}</td><td>${p.deadline||'-'}</td>
           <td>${p.expired? '<span class="badge badge-orange">경과(소멸대상)</span>' : '<span class="badge badge-green">정상</span>'}</td>
           <td>${p.needsPayment? '<span class="badge badge-red">Y</span>' : '<span class="badge badge-gray">N</span>'}</td>
